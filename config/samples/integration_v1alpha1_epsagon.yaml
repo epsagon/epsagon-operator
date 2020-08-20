@@ -1,0 +1,7 @@
+apiVersion: integration.epsagon.com/v1alpha1
+kind: Epsagon
+metadata:
+  name: epsagon-sample
+spec:
+  # Add fields here
+  foo: bar
