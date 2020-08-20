@@ -1,0 +1,7 @@
+domain: epsagon.com
+layout: go.kubebuilder.io/v2
+projectName: epsagon-operator
+repo: github.com/epsagon/epsagon-operator
+version: 3-alpha
+plugins:
+  go.sdk.operatorframework.io/v2-alpha: {}
