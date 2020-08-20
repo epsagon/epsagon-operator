@@ -12,14 +12,20 @@ type EpsagonSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Epsagon. Edit Epsagon_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// EpsagonToken is the Epsagon token for the account integrating this cluster
+	EpsagonToken string `json:"epsagonToken"`
+
+	// ClusterEndpoint cluster api endpoint to access from outside of the cluster
+	ClusterEndpoint string `json:"clusterEndpoint"`
 }
 
 // EpsagonStatus defines the observed state of Epsagon
 type EpsagonStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// ClusterEndpoint cluster api endpoint to access from outside of the cluster
+	Integrated bool `json:"integrated"`
 }
 
 // +kubebuilder:object:root=true
