@@ -23,6 +23,12 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+ifeq (,$(CONTAINER_RUNTIME))
+CONTAINER_RUNTIME=$(CONTAINER_RUNTIMEH)
+else
+CONTAINER_RUNTIME=podman
+endif
+
 all: manager
 
 # Run tests
@@ -68,11 +74,11 @@ generate: controller-gen
 
 # Build the docker image
 docker-build: test
-	docker build . -t ${IMG}
+	$(CONTAINER_RUNTIME) build . -t ${IMG}
 
 # Push the docker image
 docker-push:
-	docker push ${IMG}
+	$(CONTAINER_RUNTIME) push ${IMG}
 
 # find or download controller-gen
 # download controller-gen if necessary
@@ -117,4 +123,4 @@ bundle: manifests
 # Build the bundle image.
 .PHONY: bundle-build
 bundle-build:
-	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	$(CONTAINER_RUNTIME) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
