@@ -9,7 +9,19 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - serviceAccounts
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
   verbs:
   - create
   - delete
@@ -41,7 +53,7 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
-  - clusterRole
+  - clusterrole
   verbs:
   - create
   - delete
@@ -53,7 +65,7 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
-  - clusterRoleBinding
+  - clusterrolebinding
   verbs:
   - create
   - delete

@@ -23,11 +23,7 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-ifeq (,$(CONTAINER_RUNTIME))
-CONTAINER_RUNTIME=$(CONTAINER_RUNTIMEH)
-else
-CONTAINER_RUNTIME=podman
-endif
+CONTAINER_RUNTIME?=podman
 
 all: manager
 
@@ -124,3 +120,6 @@ bundle: manifests
 .PHONY: bundle-build
 bundle-build:
 	$(CONTAINER_RUNTIME) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+
+
+build-push-deploy: docker-build docker-push deploy

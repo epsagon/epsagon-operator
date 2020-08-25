@@ -45,7 +45,7 @@ func main() {
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "05e22a8c.epsagon.com",
-		Namespace:          "epsagon-monitoring",
+		Namespace:          "",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
