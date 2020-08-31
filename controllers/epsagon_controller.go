@@ -169,8 +169,11 @@ func (r *EpsagonReconciler) deployEpsagonRole() error {
 		},
 	}
 
-	if err := r.Create(ctx, sa); err != nil {
-		return err
+	testSa := &v1.ServiceAccount{}
+	if err := r.Get(ctx, client.ObjectKey{Name: sa.ObjectMeta.Name, Namespace: sa.ObjectMeta.Namespace}, testSa); err != nil {
+		if err := r.Create(ctx, sa); err != nil {
+			return err
+		}
 	}
 	if err := r.Create(ctx, clusterRole); err != nil {
 		return err
