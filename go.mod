@@ -3,6 +3,7 @@ module github.com/epsagon/epsagon-operator
 go 1.13
 
 require (
+	github.com/confluentinc/confluent-kafka-go v1.4.2 // indirect
 	github.com/go-logr/logr v0.1.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1

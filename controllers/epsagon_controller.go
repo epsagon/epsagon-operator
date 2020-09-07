@@ -3,9 +3,13 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"math"
 	"net/http"
+	"os"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	rbacbeta1 "k8s.io/api/rbac/v1beta1"
@@ -17,6 +21,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -25,6 +30,13 @@ import (
 
 const epsagonMonitoring = "epsagon-monitoring"
 const epsagonPrometheus = "epsagon-prometheus"
+const epsagonAPIEndpoint = "https://api.epsagon.com/"
+const epsagonTESTAPIEndpoint = "https://devapi.epsagon.com/"
+const addCluster = "containers/k8s/add_cluster_by_token"
+const checkConnection = "containers/k8s/check_cluster_connection"
+const deleteCluster = "containers/k8s/delete_cluster_by_token"
+const integratedSuccessfuly = "Integrated Successfuly"
+const epsagonFinalizer = "finalizer.integration.epsagon.com"
 
 // EpsagonReconciler reconciles a Epsagon object
 type EpsagonReconciler struct {
@@ -38,8 +50,8 @@ type EpsagonReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrole,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebinding,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=get;list;watch;create;update;patch;delete;escalate;bind
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile k8s state will make sure epsagon roles are deployed
 func (r *EpsagonReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
@@ -60,25 +72,50 @@ func (r *EpsagonReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
+	if isBeingDeleted := epsagonResource.GetDeletionTimestamp(); isBeingDeleted != nil {
+		if contains(epsagonResource.GetFinalizers(), epsagonFinalizer) {
+			controllerutil.RemoveFinalizer(epsagonResource, epsagonFinalizer)
+			if err = r.Update(ctx, epsagonResource); err != nil {
+				return r.manageError(epsagonResource, err)
+			}
+			return r.deleteEpsagonIntegration(epsagonResource)
+		}
+	}
+	if !contains(epsagonResource.GetFinalizers(), epsagonFinalizer) {
+		if err := r.addFinalizer(epsagonResource); err != nil {
+			return r.manageError(epsagonResource, err)
+		}
+	}
+
 	epsagonResource.Status.Status = "Processing"
 	r.Status().Update(ctx, epsagonResource)
 
 	if err := r.deployEpsagonRole(); err != nil {
 		epsagonResource.Status.Status = "Failed to deploy roles"
-		r.Status().Update(ctx, epsagonResource)
-		return ctrl.Result{}, err
+		return r.manageError(epsagonResource, err)
 	}
 
 	if err := r.sendKeysToEpsagon(epsagonResource); err != nil {
 		epsagonResource.Status.Status = "Integration Failed"
-		epsagonResource.Status.IntegrationError = err.Error()
-		r.Status().Update(ctx, epsagonResource)
-		return ctrl.Result{}, err
+		return r.manageError(epsagonResource, err)
 	}
 
-	epsagonResource.Status.Status = "Integrated Sucessfuly"
+	epsagonResource.Status.Status = integratedSuccessfuly
 	r.Status().Update(ctx, epsagonResource)
 	return ctrl.Result{}, nil
+}
+
+func (r *EpsagonReconciler) deleteEpsagonIntegration(epsagon *integrationv1alpha1.Epsagon) (ctrl.Result, error) {
+	r.Log.Info("Removing integration from Epsagon")
+	buf, err := r.getIntegrationParams(epsagon)
+	if err != nil {
+		return r.manageError(epsagon, err)
+	}
+	err = callEpsagonAPI(buf, r.Log, deleteCluster)
+	if err == nil {
+		return ctrl.Result{}, nil
+	}
+	return r.manageError(epsagon, err)
 }
 
 func (r *EpsagonReconciler) getSAToken() (string, error) {
@@ -93,26 +130,60 @@ func (r *EpsagonReconciler) getSAToken() (string, error) {
 	if err := r.Get(ctx, secretKey, secret); err != nil {
 		return "", err
 	}
-	decoded, err := base64.StdEncoding.DecodeString(string(secret.Data["token"]))
-	if err != nil {
-		return "", err
-	}
-	return string(decoded), nil
+	encodedToken := secret.Data["token"]
+	return string(encodedToken), nil
 }
 
-func (r *EpsagonReconciler) sendKeysToEpsagon(epsagonResource *integrationv1alpha1.Epsagon) error {
-	roleToken, err := r.getSAToken()
+func callEpsagonAPI(buf []byte, logger logr.Logger, path string) error {
+	var err error
+	var resp *http.Response
+	if os.Getenv("EPSAGON_TEST") == "TRUE" {
+		resp, err = http.Post(epsagonTESTAPIEndpoint+path, "application/json", bytes.NewReader(buf))
+	} else {
+		resp, err = http.Post(epsagonAPIEndpoint+path, "application/json", bytes.NewReader(buf))
+	}
 	if err != nil {
 		return err
 	}
-	buf, err := json.Marshal(map[string]string{
-		"k8s_cluster_url": epsagonResource.Spec.ClusterEndpoint,
-		"epagon_token":    epsagonResource.Spec.EpsagonToken,
-		"cluster_token":   roleToken,
-		"operator-used":   "True",
-	})
-	_, err = http.Post("https://api.epsagon.com/containers/k8s/add_cluster_by_token", "application/json", bytes.NewReader(buf))
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	logger.Info("Epsagon api response:", "StatusCode", resp.StatusCode, "body", string(body))
+	if resp.StatusCode != 200 {
+		return fmt.Errorf(string(body))
+	}
 	return err
+}
+
+func (r *EpsagonReconciler) getIntegrationParams(epsagonResource *integrationv1alpha1.Epsagon) ([]byte, error) {
+	roleToken, err := r.getSAToken()
+	if err != nil {
+		return []byte{}, err
+	}
+	buf, err := json.Marshal(map[string]string{
+		"k8s_cluster_url":    epsagonResource.Spec.ClusterEndpoint,
+		"epsagon_token":      epsagonResource.Spec.EpsagonToken,
+		"cluster_token":      roleToken,
+		"integration_source": "Operator",
+	})
+	if err != nil {
+		return []byte{}, err
+	}
+	return buf, nil
+}
+
+func (r *EpsagonReconciler) sendKeysToEpsagon(epsagonResource *integrationv1alpha1.Epsagon) error {
+	buf, err := r.getIntegrationParams(epsagonResource)
+	if err != nil {
+		return nil
+	}
+
+	if err = callEpsagonAPI(buf, r.Log, checkConnection); err != nil {
+		return err
+	}
+	return callEpsagonAPI(buf, r.Log, addCluster)
 }
 
 func (r *EpsagonReconciler) deployEpsagonRole() error {
@@ -176,11 +247,17 @@ func (r *EpsagonReconciler) deployEpsagonRole() error {
 			return err
 		}
 	}
-	if err := r.Create(ctx, clusterRole); err != nil {
-		return err
+	testCR := &rbacbeta1.ClusterRole{}
+	if err := r.Get(ctx, client.ObjectKey{Name: clusterRole.ObjectMeta.Name}, testCR); err != nil {
+		if err := r.Create(ctx, clusterRole); err != nil {
+			return err
+		}
 	}
-	if err := r.Create(ctx, clusterRoleBinding); err != nil {
-		return err
+	testCRB := &rbacbeta1.ClusterRoleBinding{}
+	if err := r.Get(ctx, client.ObjectKey{Name: clusterRoleBinding.ObjectMeta.Name}, testCRB); err != nil {
+		if err := r.Create(ctx, clusterRoleBinding); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -194,6 +271,12 @@ func onlyEpsagonMonitoring() predicate.Predicate {
 			}
 			return false
 		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.MetaNew.GetGeneration() == e.MetaOld.GetGeneration() {
+				return false
+			}
+			return true
+		},
 	}
 }
 
@@ -202,11 +285,61 @@ func (r *EpsagonReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&integrationv1alpha1.Epsagon{}).
 		Owns(&v1.ServiceAccount{}).
-		// Owns(&rbacbeta1.ClusterRole{}).
-		// Owns(&rbacbeta1.ClusterRoleBinding{}).
+		Owns(&rbacbeta1.ClusterRole{}).
+		Owns(&rbacbeta1.ClusterRoleBinding{}).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 		}).
 		WithEventFilter(onlyEpsagonMonitoring()).
 		Complete(r)
+}
+
+func (r *EpsagonReconciler) manageError(epsagon *integrationv1alpha1.Epsagon, issue error) (ctrl.Result, error) {
+	var retryInterval time.Duration
+	lastUpdate := epsagon.Status.LastUpdate
+	epsagon.Status = integrationv1alpha1.EpsagonStatus{
+		LastUpdate: metav1.Now(),
+		Reason:     issue.Error(),
+		Status:     epsagon.Status.Status,
+	}
+	err := r.Status().Update(context.Background(), epsagon)
+
+	if err != nil {
+		r.Log.Error(err, "Unable to update status")
+		return ctrl.Result{
+			RequeueAfter: time.Second,
+			Requeue:      true,
+		}, nil
+	}
+	if lastUpdate.IsZero() {
+		retryInterval = time.Second
+	} else {
+		retryInterval = epsagon.Status.LastUpdate.Sub(lastUpdate.Time).Round(time.Second)
+	}
+	return ctrl.Result{
+		RequeueAfter: time.Duration(math.Min(float64(retryInterval.Nanoseconds()*2), float64(time.Hour.Nanoseconds()*6))),
+		Requeue:      true,
+	}, nil
+}
+
+func (r *EpsagonReconciler) addFinalizer(epsagon *integrationv1alpha1.Epsagon) error {
+	r.Log.Info("Adding Finalizer for the Epsagon")
+	controllerutil.AddFinalizer(epsagon, epsagonFinalizer)
+
+	// Update CR
+	err := r.Update(context.TODO(), epsagon)
+	if err != nil {
+		r.Log.Error(err, "Failed to update Epsagon with finalizer")
+		return err
+	}
+	return nil
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

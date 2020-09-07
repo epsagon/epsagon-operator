@@ -9,6 +9,18 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - secrets
   verbs:
   - create
@@ -53,7 +65,7 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
-  - clusterrole
+  - clusterrolebindings
   verbs:
   - create
   - delete
@@ -65,10 +77,12 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
-  - clusterrolebinding
+  - clusterroles
   verbs:
+  - bind
   - create
   - delete
+  - escalate
   - get
   - list
   - patch

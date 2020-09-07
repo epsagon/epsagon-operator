@@ -25,9 +25,11 @@ type EpsagonStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Status of the integration with Epsagon
-	Status string `json:"status"`
-	// IntegrationError description of the error, if any.
-	IntegrationError string `json:"integrationError"`
+	Status string `json:"status,omitempty"`
+	// Reason description of the error, if any.
+	Reason string `json:"reason,omitempty"`
+	// LastUpdate the last update time of this resource
+	LastUpdate metav1.Time `json:"lastUpdate,omitempty"`
 }
 
 // +kubebuilder:object:root=true
