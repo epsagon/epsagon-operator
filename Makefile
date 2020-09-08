@@ -57,6 +57,11 @@ delete: manifests kustomize
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
 
+update-release: docker-build docker-push
+	$(KUSTOMIZE) build config/crd > build/crd.yaml
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default > build/epsagon-operator.yaml
+
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
@@ -125,6 +130,5 @@ bundle: manifests
 .PHONY: bundle-build
 bundle-build:
 	$(CONTAINER_RUNTIME) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
-
 
 build-push-deploy: docker-build docker-push deploy
