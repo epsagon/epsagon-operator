@@ -10,8 +10,8 @@ make deploy
 ```
 ### From github release:
 ```
-https://raw.githubusercontent.com/epsagon/epsagon-operator/v0.1/build/crd.yaml | kubectl apply -f -
-https://raw.githubusercontent.com/epsagon/epsagon-operator/v0.1/build/epsagon-operator.yaml | kubectl apply -f -
+curl https://raw.githubusercontent.com/epsagon/epsagon-operator/v0.1/build/crd.yaml | kubectl apply -f -
+curl https://raw.githubusercontent.com/epsagon/epsagon-operator/v0.1/build/epsagon-operator.yaml | kubectl apply -f -
 ```
 
 ## Usage
