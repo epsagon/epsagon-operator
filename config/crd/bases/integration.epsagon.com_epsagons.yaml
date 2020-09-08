@@ -51,12 +51,16 @@ spec:
         status:
           description: EpsagonStatus defines the observed state of Epsagon
           properties:
-            integrated:
-              description: ClusterEndpoint cluster api endpoint to access from outside
-                of the cluster
-              type: boolean
-          required:
-          - integrated
+            lastUpdate:
+              description: LastUpdate the last update time of this resource
+              format: date-time
+              type: string
+            reason:
+              description: Reason description of the error, if any.
+              type: string
+            status:
+              description: Status of the integration with Epsagon
+              type: string
           type: object
       type: object
   version: v1alpha1

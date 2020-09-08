@@ -24,8 +24,12 @@ type EpsagonStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// ClusterEndpoint cluster api endpoint to access from outside of the cluster
-	Integrated bool `json:"integrated"`
+	// Status of the integration with Epsagon
+	Status string `json:"status,omitempty"`
+	// Reason description of the error, if any.
+	Reason string `json:"reason,omitempty"`
+	// LastUpdate the last update time of this resource
+	LastUpdate metav1.Time `json:"lastUpdate,omitempty"`
 }
 
 // +kubebuilder:object:root=true
