@@ -19,9 +19,17 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager 
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+# FROM gcr.io/distroless/static:nonroot
+FROM registry.redhat.io/ubi7
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY LICENSE /licences
+
 USER nonroot:nonroot
+
+LABEL name=epsagon-operator
+LABEL vendor=epsagon
+LABEL description="Epsagon Operator integrated the cluster with Epsagon"
+LABEL summary="Epsagon Operator integrated the cluster with Epsagon"
 
 ENTRYPOINT ["/manager"]
