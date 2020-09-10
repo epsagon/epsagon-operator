@@ -1,28 +1,20 @@
 # Build the manager binary
 # FROM golang:1.13 as builder
-FROM registry.redhat.io/ubi7/go-toolset
+FROM registry.access.redhat.com/ubi8/ubi-minimal
 
 LABEL name=epsagon-operator \
       vendor=epsagon \
       description="Epsagon Operator integrated the cluster with Epsagon" \
       summary="Epsagon Operator integrated the cluster with Epsagon"
-COPY LICENSE /licenses
+RUN mkdir /licenses
+COPY LICENSE /licenses/LICENSE.txt
+ENV OPERATOR=/usr/local/bin/epsagon-operator \
+    USER_UID=1001 \
+    USER_NAME=epsagon-operator
 
-WORKDIR /workspace
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
-RUN bash -c "go mod download"
-
-# Copy the go source
-COPY main.go main.go
-COPY api/ api/
-COPY controllers/ controllers/
-
-# Build
-RUN bash -c "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go"
+COPY bin/epsagon-operator ${OPERATOR}
+COPY bin/user_setup /usr/local/bin/user_setup
+RUN /usr/local/bin/user_setup
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -31,6 +23,6 @@ RUN bash -c "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o
 # WORKDIR /
 # COPY --from=builder /workspace/manager .
 
-USER nonroot:nonroot
+ENTRYPOINT ["/usr/local/bin/entrypoint"]
 
-ENTRYPOINT ["/workspace/manager"]
+USER ${USER_UID}
